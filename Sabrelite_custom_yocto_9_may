@@ -1,0 +1,201 @@
+Notes and additional info appears [like this]
+Errors appear *{like this}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Core-image-base for sabrelite ref board
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+The essential packages you need for a supported Ubuntu distribution are shown in the following command:
+sudo apt-get install gawk wget git-core diffstat unzip texinfo \
+build-essential chrpath libsdl1.2-dev xterm curl
+
+
+1.mkdir ~/bin
+
+2.Now we need repo utility from google throught our procedure.
+repo is value added utility for the downloading git repositories
+for that
+curl http://commondatastorage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+[curl is a command line tool and library for transferring data with URL syntax, supporting DICT, FILE, FTP, FTPS]
+
+3.our usual PATH setting for using executable
+PATH=$PATH:~/bin
+
+4.make it executable
+chmod a+x ~/bin/repo
+[steps 5,6,7,8,9,10,11,12 for downloading the BSP source]
+
+5.mkdir fsl-community-bsp
+[
+A Board Support Package (BSP) is a collection of information that defines how to support a particular hardware device, set of devices, or hardware platform. The BSP includes information about the hardware features present on the device and kernel configuration information along with any additional hardware drivers required. The BSP also lists any additional software components required in addition to a generic Linux software stack for both essential and optional platform features. 
+
+It is a layer in Yocto
+]
+
+6.cd fsl-community-bsp
+
+7.repo init -u https://github.com/Freescale/fsl-community-bsp-platform -b dora  
+
+Here you may encounter an error
+*{error.GitError: manifests var: 
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"}
+
+Solution is :
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+8.Again
+
+repo init -u https://github.com/Freescale/fsl-community-bsp-platform -b dora
+[
+Installs Repo in the current directory. This creates a .repo/ directory that contains Git repositories for the Repo source code and the standard  manifest files. The .repo/ directory also contains manifest.xml, which is a symlink to the selected manifest in the .repo/manifests/ directory.
+
+Options:
+
+    -u: specify a URL from which to retrieve a manifest repository. 
+
+    -m: select a manifest file within the repository. If no manifest name is selected, the default is default.xml.
+
+    -b: specify a revision, i.e., a particular manifest-branch.
+]
+
+9.Enable color display in this user account (y/N)? y
+10.repo sync
+11.repo init -b dora
+[redundant as you can check
+in fsl-community-bsp/.repo/manifest.xml
+that revesion is dora
+we will still do it as freescale recommends it]
+12.again
+repo sync
+13.repo start <new branch name> --all
+[we used repo start yocto-local-branch1 --all]
+14.
+source setup-environment build
+[created build for the reference board default sabre-sd
+if you want to change defult board
+vi conf/local.conf,
+It's been suggested that BB_NUMBER_THREADS should be 2 * the number of cores
+and PARALLEL_MAKE should be equal to the number of cores available on the
+build machine.
+ In order to figure out all supported machine names:
+ls ../sources/meta-fsl-arm/conf/machine/*.conf -l]
+
+[sabrelite will not be visible here but it is supported
+the conf file is in directory home/piyush/fsl-community-bsp/sources/meta-fsl-arm-extra/conf/machine/imx6qsabrelite.conf]
+
+15.
+to list all possible images we can build
+find ../sources -name *image*
+but we will start with the basic core-image-base. It does not have X11 or gstreamer or QT, but it take 30 minutes to build at first time. And should work great for any board
+16.
+bitbake core-image-base
+*{ERROR: Execution of event handler 'check_sanity_eventhandler' failed}
+solution:sudo apt-get install chrpath
+17.again
+bitbake core-image-base
+
+Image bake will complete successfully but with some errors.
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Editing U-boot for custom board
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+First see which u-boots are available
+=>bitbake -s | grep u-boot
+
+To see which one we are using see file machine.conf in our case,sabrelite.conf redirects to nitrogen6x.conf,so see nitrogen6x.conf
+Default is u-boot-boundary
+
+1.clean everything ie u-boot.imx u-boot.bin
+bitbake u-boot-boundary -c cleansstate(deletes everything including sourcecode)
+or
+bitbake u-boot-boundary -c cleanall(deletes everything including sourcecode)
+2.get source code
+bitbake u-boot-boundary 
+3.edit
+*Note to change pad settings of uart etc change in only nitrogen6x.c no need in sabrelite.c.
+4.only Compile(to be sure delete u-boot.imx and u-boot.bin from git folder)
+bitbake u-boot-boundary -c compile.
+(here u-boot.imx is generated which can be directly burnt in sd card )
+5.Deploy
+bitbake u-boot-boundary -c deploy
+uboot now appears in build/temp/deploy
+6.Burn
+run this from git or deploy
+sudo dd if=u-boot.imx of=/dev/sXx bs=512 seek=2&&sudo sync
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+some important files for custom board editing
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+[nitrogen6x.conf=>settin preferred bootloader ,preferred kernel]
+[local.conf=>setting Machine,No of threads in your pc for faster bitbake image]
+[nitrogen6x.c =>for pad setting]
+[nitrogen6x.h=> boot paramaters]
+[bblayer.conf=> layer info]
+[ddr-setup.cfg=>dcd settings]
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+board file path:
+/home/piyush/fsl-community-bsp/build/tmp/work/imx6qsabresd-poky-linux-gnueabi/linux-imx/3.0.35-r37.14/git/arch/arm/mach-mx6/board-mx6q_sabresd.c
+
+build/Sstate-cache keeps the pre-build packages cache so once one package is built, and it´s not changes, no need to re-build it again.
+If a team shares the same build environment, the sstate-cache folder can be shared as well. I´m not personally used to configure it, so, please, follow the doc http://www.yoctoproject.org/docs/current/poky-ref-manual/poky-ref-manual.html
+
+=>The downloads folder is shared for any build folder. It holds every package´s source code. For example, the ssh source code (and this source code can be built for any architecture)
+
+=>In addition, you may want to share the download folder with your team (one download folder for the complete team), so please, go to Yocto Project Reference Manual and look for DL_DIR.
+
+=>Inside tmp folder you will find images and build results. Images is placed inside deploy.
+
+=>The complete log for any 'bitbake' you did is under log.
+
+=>In order to know the tasks and the task sequence, take a look to log.taskorder file.
+
+=>For the images generated
+ ls -la tmp/deploy/images/imx6qsabresd/
+
+=>You can access any generated image, the image name ending with the yearmothdaypid (long number) is the real image, and every time your bitbake complete, it generate a new image.
+
+=>The .ext3 file is the EXT3 image for the rootfs. (you can copy it directly to SD card using dd: $sudo dd if=core-image-base.ext3 of=/dev/sdb2 )
+
+The .sdcard file is the complete image to be copied to sdcard. It´s u-boot+uImage+rootfs
+
+The .tar.bz2 file is the tarball for the rootfs, you can extract it on your PC.
+
+uImage is the latest kernel image
+
+u-boot is the latest u-boot image.
+
+and so on
+*{if baking is interrupted you get error bitbake not install sudo apt-get install bitbake to install
+solution:cd ..
+source setup-environment build
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
